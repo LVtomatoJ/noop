@@ -111,6 +111,11 @@ test("repo language → host requirements (only when the repo is on disk)", asyn
   expect(matches({ repo: js }, mac)).toBe(true); // node is enough for package.json
   expect(matches({ repo: js }, ["os:linux"])).toBe(false);
   expect(capOk("cli:bun|cli:node", ["cli:bun"])).toBe(true);
+  const { knownCli } = await import("../src/core");
+  expect(knownCli("cli:aws", mac)).toBe(false); // planner guess no host reports → dropped
+  expect(knownCli("cli:aws", [...mac, "cli:aws"])).toBe(true); // declared in some host's [host] caps → kept
+  expect(knownCli("cli:cargo|cli:node", mac)).toBe(true);
+  expect(knownCli("os:windows", mac)).toBe(true); // only cli:* guesses are filtered; a real platform need still parks
   expect(matches({ repo: "/nonexistent/repo/xyz", requires: "cli:cargo" }, mac)).toBe(false); // stored at creation
 });
 

@@ -29,8 +29,8 @@ import { followUpTarget, reopenTask, type BrainOut, ClaudeModel, SYSTEM, dataAct
 import { runTool } from "../cloud/src/tools";
 import { cloudDeploy, startCloudBridge } from "./cloud";
 import { adoptCloudUrl, readHubToml } from "./sync";
-import { judgeAccuracy, level, needsApproval, proposeBatch, resolveProposals, routineQueued, supersedeProposed } from "./autonomy";
-import { CODE, UPDATE_REQUEST, type UpdateState, setUpdateState, updateState, allowedClis, capOk, idTagFor, isPrimary, runningRev, setApprovalGate, setIdTag } from "./core";
+import { judgeAccuracy, level, needsApproval, noteStuckRoutine, proposeBatch, resolveProposals, routineQueued, supersedeProposed } from "./autonomy";
+import { CODE, UPDATE_REQUEST, type UpdateState, setUpdateState, updateState, allowedClis, capOk, idTagFor, knownCli, isPrimary, runningRev, setApprovalGate, setIdTag } from "./core";
 import { accountEnv, accountsStatus, classify, failoverAccount, pendingLoginIds, pickAccount, reportFailure, retryLogins, submitLoginCode } from "./accounts";
 import { channelPrompt, channels, resolveChannels, updateChannel } from "./channels";
 
@@ -97,7 +97,12 @@ function runRoutines(cfg: Cfg, host: string, primary: boolean) {
     // scheduler "each": every machine runs its own copy, pinned to it (e.g. the weekly security check of this computer)
     const pin = owner === "each" ? host : undefined;
     const queued = routineQueued(r.name, pin); // a copy queued or running → this run is redundant
-    if (queued) { state[r.name] = new Date().toISOString(); journal(host, `⏰ routine \`${r.name}\` skipped: ${queued} still queued/running`); continue; }
+    if (queued) {
+      state[r.name] = new Date().toISOString();
+      journal(host, `⏰ routine \`${r.name}\` skipped: ${queued} still queued/running`);
+      noteStuckRoutine(cfg, r.name, queued, state);
+      continue;
+    }
     if (r.signal && !signalChanged(r, state)) { state[r.name] = new Date().toISOString(); continue; } // nothing new → no AI run
     if (r.agent === "architect") computeMetrics(r.name === "evolve-deep" ? 30 : 7);
     const prompt = r.readonly ? `${r.prompt}\n\nRead-only routine: observe and report only. Do not change code, PRs, issues or settings; propose any change as a follow-up.` : r.prompt;
@@ -659,7 +664,9 @@ const nap = (ms: number) => Promise.race([Bun.sleep(ms), new Promise<void>((r) =
 async function planNow(cfg: Cfg, host: string) {
   const todo = list(P("tasks", "inbox"), /^T-.*\.md$/).map((p) => ({ p, ...readDoc(p) })).filter((t) => !t.meta.planned).slice(0, 12);
   if (!todo.length) return;
-  const hosts = onlineHosts(cfg).map((h) => `- ${h.host}: ${h.caps.join(",")}`).join("\n");
+  const online = onlineHosts(cfg);
+  const known = [...hostCaps(cfg), ...online.flatMap((h) => h.caps)];
+  const hosts = online.map((h) => `- ${h.host}: ${h.caps.join(",")}`).join("\n");
   const r = await quickAsk(`You place tasks for an AI agent fleet running on several machines.
 For each task decide:
 - channels: zero to three slugs from the channel goals below, or {"name":"...","goal":"..."} for a new work topic.
@@ -684,12 +691,14 @@ Reply with exactly one fenced json block: {"<task id>": {"requires": "", "cli": 
     for (const t of todo) {
       const v = r[t.meta.id];
       if (!v || !existsSync(t.p)) continue;
-      const req = [...new Set([...(t.meta.requires ?? "").split(","), ...String(v.requires ?? "").split(",")].map((x) => x.trim()).filter(Boolean))].join(",");
+      const guessed = String(v.requires ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+      const dropped = guessed.filter((x) => !knownCli(x, known));
+      const req = [...new Set([...(t.meta.requires ?? "").split(","), ...guessed.filter((x) => knownCli(x, known))].map((x) => x.trim()).filter(Boolean))].join(",");
       const pinned = t.meta.cli && t.meta.cli !== "auto";
       const channelSlugs = [...new Set([...(t.meta.channels ?? "").split(",").filter(Boolean), ...resolveChannels(v.channels)])].join(",");
       writeDoc(t.p, { ...readDoc(t.p).meta, channels: channelSlugs, requires: req, ...(pinned ? {} : { cli: v.cli === "codex" ? "codex" : "claude" }),
         ...(v.difficulty === "hard" ? { difficulty: "hard" } : {}), planned: now() }, t.body);
-      journal(host, `🧭 ${t.meta.id} planned: ${req || "any host"} · ${pinned ? t.meta.cli : v.cli}`);
+      journal(host, `🧭 ${t.meta.id} planned: ${req || "any host"} · ${pinned ? t.meta.cli : v.cli}${dropped.length ? ` (dropped ${dropped.join(",")}: no host has it)` : ""}`);
     }
     await _commitPush(`[${host}] plan ${todo.length} tasks`);
   });
