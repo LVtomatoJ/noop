@@ -47,6 +47,7 @@ import { CLIENT_VERSION } from "./version";
 import { createSettingsToast, SettingsToast } from "./settings-toast";
 import { agentDisplayName, avatarOf } from "./avatars";
 import { CheckMark } from "./ui/icons";
+import { attachmentName, isDoc } from "./files";
 import { type Channel, channelDigest, sortChannels } from "./channels";
 import { isRead, markRead, unreadEvents, toggleMessageRead, type MessageReadState as ReadState } from "./read";
 import { setupTray, type TrayChat } from "./tray";
@@ -763,6 +764,7 @@ function Media(props: { hub: Hub; path: string }) {
   const ratio = signal(16 / 10);
   const zoomed = signal(false);
   const frame: ViewStyle = { borderRadius: radius.inset, backgroundColor: colors.inset };
+  if (isDoc(props.path)) return <DocAttachment src={src} name={attachmentName(props.path)} />;
   if (isVideo(props.path)) return <Video src={src} controls paused style={{ ...frame, borderWidth: 1, borderColor: colors.border, width: "100%", maxWidth: 480, aspectRatio: 16 / 9 }} />;
   // a thumbnail that keeps the timeline readable; press it to see the full image
   const THUMB = 240;
@@ -813,6 +815,65 @@ function Media(props: { hub: Hub; path: string }) {
         </View>
       </Dialog>
     </If>
+  );
+}
+
+/** A Markdown report attached to a message: a file card in the timeline that opens a reader (rendered with TextView). */
+function DocAttachment(props: { src: string; name: string }) {
+  const open = signal(false);
+  const text = signal<string | null>(null);
+  const error = signal("");
+  const load = () => {
+    open.set(true);
+    if (text() !== null) return;
+    error.set("");
+    void fetch(props.src)
+      .then(async (r) => (r.ok ? text.set(stripFrontMatter(await r.text())) : error.set(r.status === 404 ? L("This file has expired.", "这个文件已过期。") : L(`Couldn’t load (${r.status})`, `读取失败（${r.status}）`))))
+      .catch(() => error.set(L("Can’t reach the server", "连不上服务器")));
+  };
+  return (
+    <View>
+      <View
+        testID="doc-attachment"
+        role="button"
+        accessibilityLabel={L(`Open ${props.name}`, `打开 ${props.name}`)}
+        onPress={load}
+        hoverStyle={{ backgroundColor: colors.raised }}
+        style={{ flexDirection: "row", alignItems: "center", gap: 10, width: 280, maxWidth: "100%", paddingVertical: 10, paddingHorizontal: 12, borderRadius: radius.inset, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, cursor: "pointer" }}
+      >
+        <View style={{ width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: alpha(colors.info, 0.12) }}>
+          <Icon name="document" size={18} tint={colors.info} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text style={{ fontSize: 14, fontWeight: "500", color: colors.text, numberOfLines: 1 }}>{props.name}</Text>
+          <Text style={{ fontSize: 12.5, color: colors.faint }}>Markdown</Text>
+        </View>
+      </View>
+      <Dialog
+        open={open()}
+        animation="fade"
+        onOpenChange={({ open: o }) => !o && open.set(false)}
+        backdropClass="bg-scrim"
+        style={{ flex: 1, padding: 16, alignItems: "center", justifyContent: "center", pointerEvents: "box-none" }}
+      >
+        <View testID="doc-reader" style={{ width: "100%", maxWidth: 820, height: "100%", maxHeight: 960, borderRadius: radius.card, borderCurve: "continuous", borderWidth: 0.5, borderColor: surfaceEdge(), backgroundColor: colors.background, overflow: "hidden" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, height: 48, paddingLeft: 16, paddingRight: 8, borderBottomWidth: 0.5, borderColor: colors.line }}>
+            <Icon name="document" size={16} tint={colors.muted} />
+            <Text style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: "600", color: colors.text, numberOfLines: 1 }}>{props.name}</Text>
+            <View testID="doc-close" role="button" accessibilityLabel={L("Close", "关闭")} onPress={() => open.set(false)} hoverStyle={hovered()} style={{ width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+              <Icon name="close" size={16} tint={colors.muted} />
+            </View>
+          </View>
+          <Scroll style={{ flex: 1 }}>
+            <View selectable style={{ gap: 12, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 32 }}>
+              <If when={text() !== null} else={<Text style={{ fontSize: 14, color: error() ? colors.danger : colors.faint }}>{error() || L("Loading…", "读取中…")}</Text>}>
+                <Rich text={text() ?? ""} />
+              </If>
+            </View>
+          </Scroll>
+        </View>
+      </Dialog>
+    </View>
   );
 }
 

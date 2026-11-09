@@ -776,6 +776,21 @@ describe("images", () => {
     };
   }
 
+  test("a Markdown report attached by an agent opens in a reader", async () => {
+    const report = { id: "r1", ts: ts(8), from: "lead@mac", kind: "notice", text: "推送通知梳理完成", attachments: ["/media/1762650000000-push-notifications.md"] };
+    const app = await open("./App.tsx", {
+      ...desk,
+      network: { ...hub([], [report]), [`GET ${URL}/media/*`]: { body: "# Push notifications\n\nAPNs and **FCM** support." } },
+    });
+    await app.waitFor("id:doc-attachment");
+    expect(app.shows("text:push-notifications.md")).toBe(true);
+    await app.press("id:doc-attachment");
+    await app.waitFor("id:doc-reader");
+    await app.waitUntil(() => app.shows("text:Push notifications"));
+    await app.press("id:doc-close");
+    await app.waitUntil(() => !app.shows("id:doc-reader"));
+  });
+
   test("a picked image shows as a thumbnail, can be removed, and is sent with the text", async () => {
     const posts: { text: string; attachments?: string[] }[] = [];
     const uploads: string[] = [];
