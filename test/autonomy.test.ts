@@ -85,6 +85,24 @@ test("routine dedupe: a long-parked copy stops blocking, a fresh one still does"
   expect(A.routineQueued("parked")).toBe("T-0104");
 });
 
+test("a routine stuck behind one copy for 30+ minutes notifies the owner once per copy", async () => {
+  const st: Record<string, string> = {};
+  writeDoc(P("tasks", "inbox", "T-0901.md"), { id: "T-0901", source: "routine:uptime-watch", created: ago(10), requires: "cli:aws", parked: ago(9) }, "");
+  A.noteStuckRoutine(cfg, "uptime-watch", "T-0901", st);
+  expect(sent).toEqual([]); // young copy: skipping it is normal
+  writeDoc(P("tasks", "inbox", "T-0901.md"), { id: "T-0901", source: "routine:uptime-watch", created: ago(45), requires: "cli:aws", parked: ago(44) }, "");
+  A.noteStuckRoutine(cfg, "uptime-watch", "T-0901", st);
+  A.noteStuckRoutine(cfg, "uptime-watch", "T-0901", st);
+  await Bun.sleep(0);
+  expect(sent.length).toBe(1);
+  expect(sent[0]).toContain("uptime-watch");
+  expect(sent[0]).toContain("cli:aws");
+  task("waiting", "T-0902", "routine:uptime-watch", ago(40)); // a different stuck copy is news again
+  A.noteStuckRoutine(cfg, "uptime-watch", "T-0902", st);
+  await Bun.sleep(0);
+  expect(sent.length).toBe(2);
+});
+
 test("read-only routines skip approval at onboarding; others and followups stay gated", () => {
   expect(A.needsApproval(cfg, "routine:uptime-watch")).toBe(false);
   expect(A.needsApproval(cfg, "routine:pr-review")).toBe(true);
