@@ -915,25 +915,16 @@ function DocPane(props: { doc: DocRef; wide: boolean; expanded: boolean; onExpan
   );
   return (
     <View testID="doc-reader" style={{ flex: 1, minWidth: 0, backgroundColor: colors.background }}>
-      <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, gap: 12, borderBottomWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <Icon name="document" size={18} tint={colors.muted} />
-          <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-            <Text testID="doc-title" style={{ fontSize: 14, lineHeight: 19, fontWeight: "600", color: colors.text, numberOfLines: 2 }}>{props.doc.name}</Text>
-          </View>
-          <If when={props.wide}>
-            {btn({ id: "doc-expand", icon: "sidebar", label: props.expanded ? L("Narrow reader", "收窄阅读栏") : L("Widen reader", "加宽阅读栏"), on: props.expanded, onPress: props.onExpand })}
-          </If>
-          {btn({ id: "doc-close", icon: "close", label: L("Close reader", "关闭阅读栏"), onPress: props.onClose })}
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <Text style={{ fontSize: 12, color: colors.muted }}>Markdown</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", padding: 2, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.background }}>
-            {btn({ id: "doc-zoom-out", icon: "minus", label: L("Smaller text", "缩小文字"), disabled: step() === 0, onPress: () => step.set(Math.max(0, step() - 1)) })}
-            <Text testID="doc-scale" style={{ width: 42, textAlign: "center", fontSize: 12, fontVariant: ["tabular-nums"], color: colors.muted }}>{`${Math.round(DOC_SCALES[step()] * 100)}%`}</Text>
-            {btn({ id: "doc-zoom-in", icon: "plus", label: L("Larger text", "放大文字"), disabled: step() === DOC_SCALES.length - 1, onPress: () => step.set(Math.min(DOC_SCALES.length - 1, step() + 1)) })}
-          </View>
-        </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 2, height: props.wide ? 44 : 52, paddingLeft: 14, paddingRight: 8, borderBottomWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
+        <Icon name="document" size={16} tint={colors.muted} />
+        <Text testID="doc-title" style={{ flex: 1, minWidth: 0, marginLeft: 8, marginRight: 6, fontSize: 13.5, fontWeight: "600", color: colors.text, numberOfLines: 1 }}>{props.doc.name}</Text>
+        {btn({ id: "doc-zoom-out", icon: "zoom-out", label: L("Smaller text", "缩小文字"), disabled: step() === 0, onPress: () => step.set(Math.max(0, step() - 1)) })}
+        <Text testID="doc-scale" style={{ width: 36, textAlign: "center", fontSize: 11.5, fontVariant: ["tabular-nums"], color: colors.faint }}>{`${Math.round(DOC_SCALES[step()] * 100)}%`}</Text>
+        {btn({ id: "doc-zoom-in", icon: "zoom-in", label: L("Larger text", "放大文字"), disabled: step() === DOC_SCALES.length - 1, onPress: () => step.set(Math.min(DOC_SCALES.length - 1, step() + 1)) })}
+        <If when={props.wide}>
+          {btn({ id: "doc-expand", icon: props.expanded ? "minimize" : "maximize", label: props.expanded ? L("Narrow reader", "收窄阅读栏") : L("Widen reader", "加宽阅读栏"), on: props.expanded, onPress: props.onExpand })}
+        </If>
+        {btn({ id: "doc-close", icon: "close", label: L("Close reader", "关闭阅读栏"), onPress: props.onClose })}
       </View>
       <Scroll style={{ flex: 1 }}>
         <View selectable style={{ width: "100%", maxWidth: 760, alignSelf: "center", gap: 12, paddingHorizontal: props.wide ? 28 : 20, paddingTop: 28, paddingBottom: 48 }}>
@@ -978,7 +969,7 @@ function SentCheck() {
       accessibilityLabel={L("Sent", "已发送")}
       style={{ width: 14, height: 16, alignItems: "center", justifyContent: "center", opacity: fade }}
     >
-      <CheckMark size={14} weight={1.8} tint={colors.muted} />
+      <CheckMark size={14} weight={2.2} tint={colors.muted} />
     </View>
   );
 }
