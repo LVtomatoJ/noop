@@ -878,15 +878,15 @@ function DocAttachment(props: { src: string; name: string }) {
       onPress={() => reading.set(active() ? null : { src: props.src, name: props.name, at: readerAt() })}
       hoverStyle={active() ? undefined : { borderColor: colors.fieldBorder, backgroundColor: alpha(colors.text, 0.03) }}
       style={{
-        flexDirection: "row", alignItems: "center", gap: 12, width: 320, maxWidth: "100%", paddingVertical: 10, paddingLeft: 10, paddingRight: 14,
+        flexDirection: "row", alignItems: "center", gap: 12, width: 344, maxWidth: "100%", padding: 14,
         borderRadius: radius.inset, borderCurve: "continuous", borderWidth: 1, cursor: "pointer",
-        borderColor: active() ? alpha(colors.info, 0.45) : colors.border,
-        backgroundColor: active() ? alpha(colors.info, 0.06) : colors.surface,
+        borderColor: active() ? alpha(colors.info, 0.35) : colors.border,
+        backgroundColor: active() ? alpha(colors.info, 0.04) : colors.background,
       }}
     >
-      {/* a page with a folded corner, quiet until it is the one being read */}
-      <View style={{ width: 30, height: 36, borderRadius: 5, borderTopRightRadius: 10, borderWidth: 1, borderColor: active() ? alpha(colors.info, 0.5) : colors.line, backgroundColor: colors.background, alignItems: "center", justifyContent: "flex-end", paddingBottom: 5 }}>
-        <Text style={{ fontFamily: MONO, fontSize: 8.5, fontWeight: "600", letterSpacing: 0.4, color: active() ? colors.info : colors.faint }}>MD</Text>
+      <View style={{ width: 40, height: 44, flexShrink: 0, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", gap: 3 }}>
+        <Icon name="document" size={18} tint={active() ? colors.info : colors.muted} />
+        <Text style={{ fontFamily: MONO, fontSize: 8, fontWeight: "600", letterSpacing: 0.5, color: colors.faint }}>MD</Text>
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Text style={{ fontSize: 14, lineHeight: 19, fontWeight: "600", color: colors.text, numberOfLines: 2 }}>{stem()}</Text>
@@ -894,6 +894,7 @@ function DocAttachment(props: { src: string; name: string }) {
           {active() ? L("Markdown · Reading", "Markdown · 正在阅读") : L("Markdown · Report", "Markdown · 报告")}
         </Text>
       </View>
+      <Icon name="chevron" size={14} tint={active() ? colors.info : colors.faint} />
     </View>
   );
 }
@@ -908,27 +909,34 @@ function DocPane(props: { doc: DocRef; wide: boolean; expanded: boolean; onExpan
   const btn = (p: { id: string; icon: IconName; label: string; on?: boolean; disabled?: boolean; onPress: () => void }) => (
     <View testID={p.id} role="button" accessibilityLabel={p.label} accessibilityState={{ disabled: !!p.disabled }}
       onPress={p.disabled ? undefined : p.onPress} hoverStyle={p.disabled ? undefined : hovered()}
-      style={{ width: 30, height: 30, borderRadius: 7, alignItems: "center", justifyContent: "center", cursor: p.disabled ? "default" : "pointer", opacity: p.disabled ? 0.35 : 1, backgroundColor: p.on ? alpha(colors.text, 0.07) : undefined }}>
+      style={{ width: props.wide ? 28 : 36, height: props.wide ? 28 : 36, borderRadius: 6, alignItems: "center", justifyContent: "center", cursor: p.disabled ? "default" : "pointer", opacity: p.disabled ? 0.35 : 1, backgroundColor: p.on ? alpha(colors.text, 0.07) : undefined }}>
       <Icon name={p.icon} size={15} tint={colors.muted} />
     </View>
   );
   return (
     <View testID="doc-reader" style={{ flex: 1, minWidth: 0, backgroundColor: colors.background }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 2, height: 48, paddingLeft: 16, paddingRight: 8, borderBottomWidth: 0.5, borderColor: colors.line }}>
-        <View style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
-          <Text testID="doc-title" style={{ fontSize: 14, fontWeight: "600", color: colors.text, numberOfLines: 1 }}>{props.doc.name}</Text>
+      <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12, gap: 12, borderBottomWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Icon name="document" size={18} tint={colors.muted} />
+          <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+            <Text testID="doc-title" style={{ fontSize: 14, lineHeight: 19, fontWeight: "600", color: colors.text, numberOfLines: 2 }}>{props.doc.name}</Text>
+          </View>
+          <If when={props.wide}>
+            {btn({ id: "doc-expand", icon: "sidebar", label: props.expanded ? L("Narrow reader", "收窄阅读栏") : L("Widen reader", "加宽阅读栏"), on: props.expanded, onPress: props.onExpand })}
+          </If>
+          {btn({ id: "doc-close", icon: "close", label: L("Close reader", "关闭阅读栏"), onPress: props.onClose })}
         </View>
-        {btn({ id: "doc-zoom-out", icon: "minus", label: L("Smaller text", "缩小文字"), disabled: step() === 0, onPress: () => step.set(Math.max(0, step() - 1)) })}
-        <Text testID="doc-scale" style={{ width: 40, textAlign: "center", fontSize: 12, fontVariant: ["tabular-nums"], color: colors.faint }}>{`${Math.round(DOC_SCALES[step()] * 100)}%`}</Text>
-        {btn({ id: "doc-zoom-in", icon: "plus", label: L("Larger text", "放大文字"), disabled: step() === DOC_SCALES.length - 1, onPress: () => step.set(Math.min(DOC_SCALES.length - 1, step() + 1)) })}
-        <If when={props.wide}>
-          <View style={{ width: 1, height: 16, marginHorizontal: 4, backgroundColor: colors.line }} />
-          {btn({ id: "doc-expand", icon: "sidebar", label: props.expanded ? L("Narrow reader", "收窄阅读栏") : L("Widen reader", "加宽阅读栏"), on: props.expanded, onPress: props.onExpand })}
-        </If>
-        {btn({ id: "doc-close", icon: "close", label: L("Close reader", "关闭阅读栏"), onPress: props.onClose })}
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <Text style={{ fontSize: 12, color: colors.muted }}>Markdown</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", padding: 2, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.background }}>
+            {btn({ id: "doc-zoom-out", icon: "minus", label: L("Smaller text", "缩小文字"), disabled: step() === 0, onPress: () => step.set(Math.max(0, step() - 1)) })}
+            <Text testID="doc-scale" style={{ width: 42, textAlign: "center", fontSize: 12, fontVariant: ["tabular-nums"], color: colors.muted }}>{`${Math.round(DOC_SCALES[step()] * 100)}%`}</Text>
+            {btn({ id: "doc-zoom-in", icon: "plus", label: L("Larger text", "放大文字"), disabled: step() === DOC_SCALES.length - 1, onPress: () => step.set(Math.min(DOC_SCALES.length - 1, step() + 1)) })}
+          </View>
+        </View>
       </View>
       <Scroll style={{ flex: 1 }}>
-        <View selectable style={{ width: "100%", maxWidth: 760, alignSelf: "center", gap: 12, paddingHorizontal: props.wide ? 28 : 18, paddingTop: 20, paddingBottom: 40 }}>
+        <View selectable style={{ width: "100%", maxWidth: 760, alignSelf: "center", gap: 12, paddingHorizontal: props.wide ? 28 : 20, paddingTop: 28, paddingBottom: 48 }}>
           <If when={body().text !== null} else={
             <View style={{ gap: 10, alignItems: "flex-start" }}>
               <Text testID="doc-status" style={{ fontSize: 14, color: body().error ? colors.danger : colors.faint }}>{body().error || L("Loading…", "读取中…")}</Text>
