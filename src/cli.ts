@@ -25,7 +25,7 @@ import { medic } from "./medic";
 import { githubStarved } from "./github";
 import { doctor, visual } from "./visual";
 import { answerFromChat, appendEvent, cancelTask, drainInbound, feed, handleOwnerMessage, mediaDays, pruneMedia, recentChat, setApplyOp, setCancelTask, setUpdateFleet, onSettingsSaved, startServer, status as hubStatus } from "./server";
-import { followUpTarget, reopenTask, type BrainOut, ClaudeModel, SYSTEM, dataActs, localStore, logBrain, think } from "./brain";
+import { addFollowUp, followUpTarget, reopenTask, type BrainOut, ClaudeModel, SYSTEM, dataActs, localStore, logBrain, think } from "./brain";
 import { runTool } from "../cloud/src/tools";
 import { cloudDeploy, startCloudBridge } from "./cloud";
 import { adoptCloudUrl, readHubToml } from "./sync";
@@ -213,11 +213,11 @@ async function processTask(path: string, cfg: Cfg, host: string) {
   const done = { ...meta, channels: chans, cli_used: cli, finished: now(), status: res.status, gate_override: undefined, requeue_note: undefined, stalls: undefined };
   const runNote = `\n\n## Run ${now()} · ${host} · ${cli}\n**${res.status}** — ${res.summary}\n`;
   // the owner added to the request while it ran: run again with the additions instead of reporting a stale result
-  const latest = existsSync(path) ? readDoc(path).body : body;
-  const added = latest.length > body.length && latest.startsWith(body) ? latest.slice(body.length) : "";
+  const latest = existsSync(path) ? readDoc(path) : { meta, body };
+  const added = latest.body.length > body.length && latest.body.startsWith(body) ? latest.body.slice(body.length) : "";
   if (existsSync(path)) unlinkSync(path);
-  if (added.includes(FOLLOW_UP) && !delegated) {
-    writeDoc(P("tasks", "inbox", `${meta.id}.md`), { ...meta, claimed_by: undefined }, body + runNote + added +
+  if (added.includes(FOLLOW_UP) && !delegated) { // the owner's words opened the gate (addFollowUp): the rerun keeps it
+    writeDoc(P("tasks", "inbox", `${meta.id}.md`), { ...meta, claimed_by: undefined, gate_override: latest.meta.gate_override }, body + runNote + added +
       "\nThe owner added the follow-up above while you were working: handle the whole request including it.\n");
     journal(host, `↻ ${meta.id} rerun with the owner's follow-up`);
     await _commitPush(`[${host}] ${meta.id} follow-up`);
@@ -710,7 +710,7 @@ async function daemon(cfg: Cfg) {
     for (const dir of ["inbox", "active", "waiting", "blocked", "done", "failed"]) {
       const f = P("tasks", dir, `${tid}.md`);
       if (!existsSync(f)) continue;
-      const { meta, body } = readDoc(f);
+      const { meta } = readDoc(f);
       // waiting on the owner's card: what they write on the task is their answer to it
       if (dir === "blocked" && meta.decision && existsSync(P("decisions", "open", `${meta.decision}.md`))) {
         answerFromChat(String(meta.decision), text, false);
@@ -723,13 +723,7 @@ async function daemon(cfg: Cfg) {
         queueMicrotask(() => void planInbox(cfg, host).then(wakeDaemon).catch(() => {}));
         return String(meta.title ?? tid);
       }
-      const added = `${body}\n\n${FOLLOW_UP} ${now()}\n> ${text.replace(/\n/g, "\n> ")}\n`;
-      if (dir === "waiting") { // parked until its sub-tasks finish: the owner's new message is acted on now, not then
-        const kids = meta.children ? ` Its sub-tasks (${meta.children}) may still be open: check them, don't start them again.` : "";
-        writeDoc(P("tasks", "inbox", `${tid}.md`), { ...meta, claimed_by: undefined, status: undefined, wake_at: undefined, resumed: "yes" },
-          `${added}\nWoken from waiting by the owner's message above: act on it now.${kids}\n`);
-        unlinkSync(f);
-      } else writeDoc(f, meta, added);
+      addFollowUp(f, text, dir === "waiting"); // a waiting one is acted on now, not when its wait ends
       journal(host, `💬 ${tid} owner added${dir === "waiting" ? " (woken from waiting)" : ""}: ${text.slice(0, 80)}`);
       await _commitPush(`[${host}] chat follow-up ${tid}`);
       return String(meta.title ?? tid);

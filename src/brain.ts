@@ -40,11 +40,28 @@ export function localStore(o: { acts: Acts; status: () => any; feed: () => { ts:
   };
 }
 
+/** The owner's words on a task open its gates until it finishes, as answering its card does (decisions.ts): "merge it yourself"
+ * said in chat must reach a run that can merge. The agent reads the words and takes a gated step only if they ask for it. */
+const OWNER_CHAT = "owner-chat";
+
 /** A task is one conversation: the owner's message on a finished task puts it back in the queue, same id, its runs as context. */
 export function reopenTask(file: string, text: string) {
   const { meta, body } = readDoc(file);
-  writeDoc(P("tasks", "inbox", `${meta.id}.md`), { ...meta, claimed_by: undefined, status: undefined, finished: undefined, wake_at: undefined, decision: undefined, attempt: undefined, resumed: "yes" },
+  writeDoc(P("tasks", "inbox", `${meta.id}.md`), { ...meta, claimed_by: undefined, status: undefined, finished: undefined, wake_at: undefined, decision: undefined, attempt: undefined, resumed: "yes", gate_override: OWNER_CHAT },
     `${body}\n\n## Owner follow-up ${now()}\n> ${text.replace(/\n/g, "\n> ")}\n\nReopened by the owner's message above: the earlier runs are your context, act on it now.\n`);
+  unlinkSync(file);
+}
+
+/** The owner added to an open task: a queued or running one gets it on top of its request (a running one reruns with it after),
+ * a waiting one is woken to act on it now. */
+export function addFollowUp(file: string, text: string, waiting: boolean) {
+  const { meta, body } = readDoc(file);
+  const added = `${body}\n\n## Owner follow-up ${now()}\n> ${text.replace(/\n/g, "\n> ")}\n`;
+  const open = { ...meta, gate_override: meta.gate_override || OWNER_CHAT };
+  if (!waiting) return writeDoc(file, open, added);
+  const kids = meta.children ? ` Its sub-tasks (${meta.children}) may still be open: check them, don't start them again.` : "";
+  writeDoc(P("tasks", "inbox", `${meta.id}.md`), { ...open, claimed_by: undefined, status: undefined, wake_at: undefined, resumed: "yes" },
+    `${added}\nWoken from waiting by the owner's message above: act on it now.${kids}\n`);
   unlinkSync(file);
 }
 

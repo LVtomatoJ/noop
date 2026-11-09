@@ -2,8 +2,8 @@
 import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { type Model, context, dataActs, localStore, reopenTask, parseTurn, think } from "../src/brain";
-import { DATA } from "../src/core";
+import { type Model, addFollowUp, context, dataActs, localStore, reopenTask, parseTurn, think } from "../src/brain";
+import { DATA, readDoc } from "../src/core";
 import { runTool, taskInfo, toolsFor, TOOLS, type WriteOp, listRoutines } from "../cloud/src/tools";
 
 const put = (p: string, s: string) => { mkdirSync(dirname(join(DATA, p)), { recursive: true }); writeFileSync(join(DATA, p), s); };
@@ -156,6 +156,25 @@ test("a finished task reopens under its own id, with its runs as context", () =>
   expect(t).toContain("**done** — shipped");
   expect(t).toContain("> 不行\n> 再改");
   expect(t).not.toMatch(/^(finished|status|claimed_by):/m);
+});
+
+test("the owner's words on a task open its gates for the next run, as answering its card does", () => {
+  // waiting on the owner to merge; they say "merge it yourself" in chat: the woken run may merge
+  put("tasks/waiting/T-0310.md", "---\nid: T-0310\ntitle: Ship\nagent: lead\nstatus: waiting\nclaimed_by: mac\nwake_at: 2026-11-09\n---\nAsked.\n");
+  addFollowUp(join(DATA, "tasks/waiting/T-0310.md"), "merge it yourself", true);
+  expect(existsSync(join(DATA, "tasks/waiting/T-0310.md"))).toBe(false);
+  const w = readDoc(join(DATA, "tasks/inbox/T-0310.md"));
+  expect(w.meta.gate_override).toBe("owner-chat");
+  expect(w.meta.claimed_by).toBeUndefined();
+  expect(w.body).toContain("> merge it yourself\n\nWoken from waiting");
+  // queued: stays in place; a card's approval already on it is kept
+  put("tasks/inbox/T-0311.md", "---\nid: T-0311\ntitle: x\nagent: lead\ngate_override: D-0399\n---\nAsked.\n");
+  addFollowUp(join(DATA, "tasks/inbox/T-0311.md"), "also this", false);
+  expect(readDoc(join(DATA, "tasks/inbox/T-0311.md")).meta.gate_override).toBe("D-0399");
+  // finished: reopened with the gate open
+  put("tasks/done/T-0312.md", "---\nid: T-0312\ntitle: x\nagent: lead\nstatus: done\n---\nAsked.\n");
+  reopenTask(join(DATA, "tasks/done/T-0312.md"), "merge it");
+  expect(readDoc(join(DATA, "tasks/inbox/T-0312.md")).meta.gate_override).toBe("owner-chat");
 });
 
 test("a task's detail names the cards it asked", () => {
