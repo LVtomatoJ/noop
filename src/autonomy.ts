@@ -1,7 +1,7 @@
 // Graduated autonomy. Start conservative ("onboarding"): self-generated work needs owner approval,
 // the judge only shadows. Graduation is proposed by the architect from metrics, decided by the owner.
 import { existsSync, unlinkSync } from "node:fs";
-import { type Cfg, P, journal, list, nextId, now, readDoc, writeDoc } from "./core";
+import { type Cfg, P, fileId, journal, list, nextId, now, readDoc, writeDoc } from "./core";
 import { notify } from "./notify";
 
 export type Level = "onboarding" | "assisted" | "autonomous";
@@ -70,7 +70,9 @@ export const judgeMayDecide = (cfg: Cfg, agent?: string) => level(cfg, agent) !=
 
 /** Batch tasks/proposed into one numbered approval message. */
 export async function proposeBatch(cfg: Cfg, host: string) {
-  const items = list(P("tasks", "proposed"), /^T-.*\.md$/).slice(0, 9);
+  // only real task files: an agent appending a note to a task's old path leaves a stub without frontmatter,
+  // which would show as "undefined（undefined）" and, never matching the batch, rebuild it on every tick
+  const items = list(P("tasks", "proposed"), /^T-.*\.md$/).filter((p) => readDoc(p).meta.id === fileId(p)).slice(0, 9);
   const itemIds = items.map((p) => readDoc(p).meta.id);
   const openPath = list(P("decisions", "open")).find((p) => readDoc(p).meta.kind === "proposals");
   if (openPath) {
