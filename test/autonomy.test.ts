@@ -85,19 +85,27 @@ test("routine dedupe: a long-parked copy stops blocking, a fresh one still does"
   expect(A.routineQueued("parked")).toBe("T-0104");
 });
 
-test("a routine stuck behind one copy for 30+ minutes notifies the owner once per copy", async () => {
+test("a routine stuck behind a copy no host can run for 30+ minutes notifies the owner once per copy", async () => {
   const st: Record<string, string> = {};
-  writeDoc(P("tasks", "inbox", "T-0901.md"), { id: "T-0901", source: "routine:uptime-watch", created: ago(10), requires: "cli:aws", parked: ago(9) }, "");
+  const parked = (id: string, min: number) =>
+    writeDoc(P("tasks", "inbox", `${id}.md`), { id, source: "routine:uptime-watch", created: ago(min + 1), requires: "cli:aws", parked: ago(min) }, "");
+  parked("T-0901", 9);
   A.noteStuckRoutine(cfg, "uptime-watch", "T-0901", st);
-  expect(sent).toEqual([]); // young copy: skipping it is normal
-  writeDoc(P("tasks", "inbox", "T-0901.md"), { id: "T-0901", source: "routine:uptime-watch", created: ago(45), requires: "cli:aws", parked: ago(44) }, "");
+  expect(sent).toEqual([]); // parked only briefly: skipping it is normal
+  // healthy or deliberate: queued for a free slot, running, waiting on CI or the owner, asking a card
+  task("inbox", "T-0903", "routine:uptime-watch", ago(120));
+  for (const [dir, id] of [["active", "T-0904"], ["waiting", "T-0905"], ["blocked", "T-0906"]]) task(dir, id, "routine:uptime-watch", ago(120));
+  for (const id of ["T-0903", "T-0904", "T-0905", "T-0906"]) A.noteStuckRoutine(cfg, "uptime-watch", id, st);
+  await Bun.sleep(0);
+  expect(sent).toEqual([]);
+  parked("T-0901", 44);
   A.noteStuckRoutine(cfg, "uptime-watch", "T-0901", st);
   A.noteStuckRoutine(cfg, "uptime-watch", "T-0901", st);
   await Bun.sleep(0);
   expect(sent.length).toBe(1);
   expect(sent[0]).toContain("uptime-watch");
   expect(sent[0]).toContain("cli:aws");
-  task("waiting", "T-0902", "routine:uptime-watch", ago(40)); // a different stuck copy is news again
+  parked("T-0902", 40); // a different stuck copy is news again
   A.noteStuckRoutine(cfg, "uptime-watch", "T-0902", st);
   await Bun.sleep(0);
   expect(sent.length).toBe(2);

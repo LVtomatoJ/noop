@@ -177,9 +177,6 @@ export function hostCaps(cfg: Cfg): string[] {
 /** One requirement; "a|b" means either cap will do (e.g. cli:bun|cli:node). */
 export const capOk = (req: string, caps: string[]) => req.split("|").some((r) => caps.includes(r.trim()));
 
-/** The planner guesses CLIs from the task text ("AWS" → cli:aws); a guess no host reports would park the task forever. */
-export const knownCli = (req: string, caps: string[]) => !req.trim().startsWith("cli:") || capOk(req, caps);
-
 /** Toolchain a repo needs, read from its manifest files. Empty when the repo dir is not on this machine. */
 export function repoRequires(repo?: string): string[] {
   if (!repo) return [];

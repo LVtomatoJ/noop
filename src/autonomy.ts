@@ -40,18 +40,16 @@ export function routineQueued(name: string, host?: string): string {
   return "";
 }
 
-/** A routine skipped because its last copy has sat queued/parked over 30 minutes: tell the owner once per copy.
- *  The skips only reach the journal, so a copy parked on a missing host cap could silence a monitor for hours. */
+/** A routine skipped behind a copy no online host can run (parked in the inbox) for 30+ minutes: tell the owner once per copy.
+ *  The skips only reach the journal and the stall supervisor only sees waiting/blocked tasks, so such a copy silences the routine. */
 export function noteStuckRoutine(cfg: Cfg, name: string, id: string, state: Record<string, string>) {
-  const key = `${name}#stuck`;
-  if (state[key] === id) return;
-  const s = QUEUED.find((d) => existsSync(P("tasks", d, `${id}.md`)));
-  const m = s ? readDoc(P("tasks", s, `${id}.md`)).meta : undefined;
-  const mins = m ? Math.floor((Date.now() - Date.parse(m.created ?? "")) / 60_000) : NaN;
-  if (!(mins >= 30)) return;
+  const key = `${name}#stuck`, f = P("tasks", "inbox", `${id}.md`);
+  if (state[key] === id || !existsSync(f)) return; // running, waiting and card tasks are progress, not a stuck copy
+  const m = readDoc(f).meta;
+  const mins = Math.floor((Date.now() - Date.parse(m.parked ?? "")) / 60_000);
+  if (!(mins >= 30)) return; // not parked (NaN), or parked only briefly
   state[key] = id;
-  const why = m!.parked ? `在等一台满足 ${m!.requires} 的在线主机` : s === "active" ? "还在运行" : `还在 ${s}`;
-  void notify(`例行任务 ${name} 已经 ${mins} 分钟没有新的一轮：上一次的 ${id} ${why}，之后每轮都被跳过。`, cfg, { kind: "notice", ref: id });
+  void notify(`例行任务 ${name} 已经 ${mins} 分钟没有新的一轮：上一次的 ${id} 在等一台满足 ${m.requires} 的在线主机，之后每轮都被跳过。`, cfg, { kind: "notice", ref: id });
 }
 
 /** A newer run of a routine replaces its older unapproved copies: move them to rejected with a note. */
