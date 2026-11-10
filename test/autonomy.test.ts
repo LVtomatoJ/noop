@@ -72,6 +72,15 @@ test("a stub without frontmatter in tasks/proposed is not proposed and does not 
   expect(sent.length).toBe(1);
 });
 
+test("answer numbers follow the card lines even when a batch has an empty slot", () => {
+  // a batch built before stubs were skipped: line 1 was an empty item, line 2 the real task
+  writeDoc(P("decisions", "open", "P-0001.md"), { id: "P-0001", kind: "proposals", created: ago(1), items: ",T-0002" }, "x");
+  task("proposed", "T-0002", "followup:T-0000");
+  expect(A.resolveProposals("P-0001", "2", "owner(chat)")).toBe(true);
+  expect(readDoc(P("tasks", "inbox", "T-0002.md")).meta.approval).toBe("P-0001");
+  expect(files("tasks", "rejected")).toEqual([]);
+});
+
 test("routine dedupe: newer run supersedes proposed copy, queued copy blocks", () => {
   task("proposed", "T-0001", "routine:pr-review");
   task("proposed", "T-0002", "routine:other");
