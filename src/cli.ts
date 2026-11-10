@@ -213,11 +213,11 @@ async function processTask(path: string, cfg: Cfg, host: string) {
   const done = { ...meta, channels: chans, cli_used: cli, finished: now(), status: res.status, gate_override: undefined, requeue_note: undefined, stalls: undefined };
   const runNote = `\n\n## Run ${now()} · ${host} · ${cli}\n**${res.status}** — ${res.summary}\n`;
   // the owner added to the request while it ran: run again with the additions instead of reporting a stale result
-  const latest = existsSync(path) ? readDoc(path) : { meta, body };
-  const added = latest.body.length > body.length && latest.body.startsWith(body) ? latest.body.slice(body.length) : "";
+  const latest = existsSync(path) ? readDoc(path).body : body;
+  const added = latest.length > body.length && latest.startsWith(body) ? latest.slice(body.length) : "";
   if (existsSync(path)) unlinkSync(path);
-  if (added.includes(FOLLOW_UP) && !delegated) { // the owner's words opened the gate (addFollowUp): the rerun keeps it
-    writeDoc(P("tasks", "inbox", `${meta.id}.md`), { ...meta, claimed_by: undefined, gate_override: latest.meta.gate_override }, body + runNote + added +
+  if (added.includes(FOLLOW_UP) && !delegated) {
+    writeDoc(P("tasks", "inbox", `${meta.id}.md`), { ...meta, claimed_by: undefined }, body + runNote + added +
       "\nThe owner added the follow-up above while you were working: handle the whole request including it.\n");
     journal(host, `↻ ${meta.id} rerun with the owner's follow-up`);
     await _commitPush(`[${host}] ${meta.id} follow-up`);
