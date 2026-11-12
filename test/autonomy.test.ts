@@ -94,6 +94,14 @@ test("an answer in words picks nothing: the card stays open instead of rejecting
   expect(files("tasks", "rejected")).toEqual(["T-0003.md"]);
 });
 
+test("precedents are the latest answers, whatever the id", () => {
+  const card = (id: string, answered: string) => writeDoc(P("decisions", "closed", `${id}.md`), { id, question: `q ${id}`, answer: "A", answered }, "x");
+  card("D-0009", "2026-11-12T10:00:00Z");
+  card("D-C0001", "2026-11-10T10:00:00Z");
+  card("P-0005", "2026-11-11T10:00:00Z");
+  expect([...core.precedents(2).matchAll(/^- (\S+)/gm)].map((m) => m[1])).toEqual(["P-0005", "D-0009"]);
+});
+
 test("routine dedupe: newer run supersedes proposed copy, queued copy blocks", () => {
   task("proposed", "T-0001", "routine:pr-review");
   task("proposed", "T-0002", "routine:other");
