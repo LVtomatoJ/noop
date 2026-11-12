@@ -81,6 +81,19 @@ test("answer numbers follow the card lines even when a batch has an empty slot",
   expect(files("tasks", "rejected")).toEqual([]);
 });
 
+test("an answer in words picks nothing: the card stays open instead of rejecting every item", () => {
+  writeDoc(P("decisions", "open", "P-0001.md"), { id: "P-0001", kind: "proposals", created: ago(1), items: "T-0002,T-0003" }, "x");
+  task("proposed", "T-0002", "followup:T-0000");
+  task("proposed", "T-0003", "followup:T-0000");
+  expect(A.resolveProposals("P-0001", "只做文档那项，另一个先不做", "owner(chat)")).toBe(false);
+  expect(files("decisions", "open")).toEqual(["P-0001.md"]);
+  expect(files("tasks", "proposed")).toEqual(["T-0002.md", "T-0003.md"]);
+  // the brain turns the words into a pick and keeps them as the owner's note
+  expect(A.resolveProposals("P-0001", "1: 2 先不做，只做文档那项", "owner(chat)")).toBe(true);
+  expect(readFileSync(P("tasks", "inbox", "T-0002.md"), "utf8")).toContain("## Owner note (P-0001)\n2 先不做，只做文档那项");
+  expect(files("tasks", "rejected")).toEqual(["T-0003.md"]);
+});
+
 test("routine dedupe: newer run supersedes proposed copy, queued copy blocks", () => {
   task("proposed", "T-0001", "routine:pr-review");
   task("proposed", "T-0002", "routine:other");
