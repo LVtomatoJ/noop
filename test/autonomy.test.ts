@@ -94,6 +94,19 @@ test("an answer in words picks nothing: the card stays open instead of rejecting
   expect(files("tasks", "rejected")).toEqual(["T-0003.md"]);
 });
 
+test("numbers followed by words, or a word that only starts like all/none, keep the card open", () => {
+  writeDoc(P("decisions", "open", "P-0001.md"), { id: "P-0001", kind: "proposals", created: ago(1), items: "T-0002,T-0003" }, "x");
+  task("proposed", "T-0002", "followup:T-0000");
+  task("proposed", "T-0003", "followup:T-0000");
+  // a Slack/Discord/CLI reply skips the chat brain: "1、不做 2、做" means do 2, not a pick of 1
+  for (const words of ["1、不做 2、做", "1 no 2 yes", "allow 2", "nonetheless 1"])
+    expect(A.resolveProposals("P-0001", words, "owner(slack)")).toBe(false);
+  expect(files("decisions", "open")).toEqual(["P-0001.md"]);
+  expect(files("tasks", "proposed")).toEqual(["T-0002.md", "T-0003.md"]);
+  expect(A.resolveProposals("P-0001", "1, 2", "owner(slack)")).toBe(true);
+  expect(files("tasks", "rejected")).toEqual([]);
+});
+
 test("precedents are the latest answers, whatever the id", () => {
   const card = (id: string, answered: string) => writeDoc(P("decisions", "closed", `${id}.md`), { id, question: `q ${id}`, answer: "A", answered }, "x");
   card("D-0009", "2026-11-12T10:00:00Z");
