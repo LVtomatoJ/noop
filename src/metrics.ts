@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { CODE, P, list, loadConfig, readDoc } from "./core";
-import { judgeAccuracy, routinesAwaitingApproval } from "./autonomy";
+import { judgeAccuracy, proposalPicks, routinesAwaitingApproval } from "./autonomy";
 
 // Which code produced these numbers. Twice now a host reported a healthy fleet while the daemon was still running a
 // checkout pinned 20+ commits back by local edits, so every fix merged upstream was inert there and every figure below
@@ -31,6 +31,24 @@ export function refAgeMinutes(root = CODE): number | null {
     try { return Math.max(0, Math.round((Date.now() - statSync(join(root, rel)).mtimeMs) / 60_000)); } catch {}
   }
   return null;
+}
+
+function rejectedTaskReason(task: Record<string, string>, batches: Map<string, Record<string, string>>) {
+  if (task.cancelled) return "cancelled";
+  if (task.approval === "superseded:unrunnable") return "system_unrunnable";
+  if (/^superseded:[TD]-[^\s/]+$/.test(task.approval ?? "")) return "system_superseded";
+  const batchId = task.approval?.match(/^rejected:(P-[^\s/]+)$/)?.[1];
+  const batch = batchId && batches.get(batchId);
+  if (!batch || !/^owner(?:\([^)]+\))?$/.test(batch.answered_by ?? "")) return "unclassified";
+
+  const items = (batch.items ?? "").split(",");
+  const position = items.indexOf(task.id) + 1;
+  const picks = proposalPicks(batch.answer ?? "", items);
+  if (!task.id || !position || !picks || picks.has(position)) return "unclassified";
+  if (!picks.size) return "owner_batch_none";
+  // A reply that refers to a missing slot gives no reliable selection to attribute to the owner.
+  for (const pick of picks) if (!items[pick - 1]) return "unclassified";
+  return "owner_batch_unselected";
 }
 
 export function computeMetrics(days = 7) {
@@ -71,7 +89,11 @@ export function computeMetrics(days = 7) {
     return [k, { runs: n, success: judged ? +(v.done / judged).toFixed(2) : null, failed: v.failed, blocked: v.blocked, median_minutes: Math.round(med) }];
   }));
   const approvals = closedCards.filter((m) => m.kind === "proposals");
-  const rejected = list(P("tasks", "rejected"), /^T-.*\.md$/).length;
+  const batches = new Map(approvals.map((m) => [m.id, m]));
+  const rejected = list(P("tasks", "rejected"), /^T-.*\.md$/);
+  const reasons = { scope: "all_retained_records", system_superseded: 0, system_unrunnable: 0, cancelled: 0,
+    owner_batch_none: 0, owner_batch_unselected: 0, unclassified: 0 };
+  for (const path of rejected) reasons[rejectedTaskReason(readDoc(path).meta, batches)]++;
   // Shadow scores are cumulative. Keep installed agents visible when their last task ages out of the window.
   const shadowAgents = new Set(Object.keys(per));
   for (const dir of list(P("agents"), /.*/)) {
@@ -80,7 +102,7 @@ export function computeMetrics(days = 7) {
   const out = {
     shadow_judge: judgeAccuracy(undefined, closedCards),
     shadow_judge_by_agent: Object.fromEntries(Array.from(shadowAgents, (a) => [a, judgeAccuracy(a, closedCards)])),
-    proposal_batches: approvals.length, proposals_rejected_total: rejected,
+    proposal_batches: approvals.length, proposals_rejected_total: rejected.length, rejected_task_reasons: reasons,
     // A routine that fires on schedule but whose copies wait for approval produces nothing; nothing else reports it.
     routines_starved: routinesAwaitingApproval(loadConfig()),
     window_days: days, generated: new Date().toISOString(), code: codeState(), agents,
